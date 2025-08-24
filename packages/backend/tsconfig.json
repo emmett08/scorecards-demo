@@ -1,10 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src"],
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "jsxImportSource": "react",
+    "composite": true,
     "rootDir": "src",
-    "composite": true
-  }
+    "outDir": "../../dist-types/packages/backend",
+    "declaration": true,
+    "emitDeclarationOnly": true
+  },
+  "include": ["src/**/*.ts", "config.d.ts"],
+  "exclude": ["dist", "node_modules"],
+  "references": [
+    { "path": "../../plugins/scorecards-backend" }
+  ]
 }

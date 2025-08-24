@@ -4,31 +4,109 @@ apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
   name: examples
+  namespace: default
 spec:
   owner: guests
+
 ---
-# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-component
+# MAIN COMPONENT
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: example-website
+  namespace: default
 spec:
   type: website
   lifecycle: experimental
-  owner: guests
-  system: examples
-  providesApis: [example-grpc-api]
+  owner: group:default/guests
+  system: default/examples
+  # Provided & consumed APIs (explicitly scoped to API kind + namespace)
+  providesApis:
+    - api:default/example-grpc-api
+  consumesApis:
+    - api:default/example-rest-api
+  # Dependencies (explicit kind + namespace)
+  dependsOn:
+    - component:default/example-backend
+    - resource:default/postgres-db
+    - resource:default/redis-cache
 ---
-# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-api
+# SUBCOMPONENTS (refer to the parent with a fully-qualified ref)
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: example-website-frontend
+  namespace: default
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:default/guests
+  system: default/examples
+  subcomponentOf: component:default/example-website
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: example-website-admin
+  namespace: default
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:default/guests
+  system: default/examples
+  subcomponentOf: component:default/example-website
+---
+# BACKEND SERVICE (dependency of main component)
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: example-backend
+  namespace: default
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/guests
+  system: default/examples
+  providesApis:
+    - api:default/example-rest-api
+  # (optional) backend's own infra dependencies
+  dependsOn:
+    - resource:default/postgres-db
+---
+# RESOURCES
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: postgres-db
+  namespace: default
+spec:
+  type: database
+  lifecycle: experimental
+  owner: group:default/guests
+  system: default/examples
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: redis-cache
+  namespace: default
+spec:
+  type: cache
+  lifecycle: experimental
+  owner: group:default/guests
+  system: default/examples
+---
+# PROVIDED API
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: example-grpc-api
+  namespace: default
 spec:
   type: grpc
   lifecycle: experimental
-  owner: guests
-  system: examples
+  owner: group:default/guests
+  system: default/examples
   definition: |
     syntax = "proto3";
 
@@ -38,4 +116,35 @@ spec:
 
     message ExampleMessage {
       string example = 1;
-    };
+    }
+---
+# CONSUMED API
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: example-rest-api
+  namespace: default
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: group:default/guests
+  system: default/examples
+  definition: |
+    openapi: 3.0.0
+    info:
+      title: Example REST API
+      version: 1.0.0
+    paths:
+      /hello:
+        get:
+          operationId: hello
+          responses:
+            '200':
+              description: ok
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      message:
+                        type: string

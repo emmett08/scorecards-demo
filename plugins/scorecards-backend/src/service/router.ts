@@ -1,4 +1,3 @@
-// plugins/scorecards-backend/src/service/router.ts
 import express from 'express';
 import { z } from 'zod';
 import {
@@ -9,22 +8,31 @@ import {
   MockSupportClient, SupportSummaryRetriever,
   MockOpaClient,
   TrackRecord, Issue, Project, BusEvent,
+  MemoryProjectTracker,
 } from '@emmett08/scorecards-framework';
 import { EventBus } from '@emmett08/scorecards-framework/events';
 
 const store = new InMemoryFactStore();
 const bus = new EventBus();
+const projectSvc = new MemoryProjectTracker();
 
+// Keep an in-memory history to support polling / backlog on SSE.
 type EntityPayload = { entityRef: string; [k: string]: unknown };
 const eventHistory: BusEvent<EntityPayload>[] = [];
+
+// Persist all bus events in history (bounded below; we cap later).
 bus.subscribe(e => {
   eventHistory.push(e);
+  // keep last 5k in memory to avoid unbounded growth
+  if (eventHistory.length > 5000) eventHistory.splice(0, eventHistory.length - 5000);
 });
 
 const projects: Project[] = [
   { id: 'proj-1', name: 'Platform Reliability', goal: 'SLOs, incidents, change mgmt', members: new Set<string>() },
   { id: 'proj-2', name: 'Support Quality', goal: 'Reopen rate, CSAT, TTR', members: new Set<string>() },
 ];
+
+projectSvc.addMember('proj-1', 'component:default/example-website');
 
 const issuesByEntity: Record<string, Issue[]> = {};
 const tracksByEntity: Record<string, TrackRecord[]> = {};
@@ -102,6 +110,20 @@ const EventsQuery = z.object({
   entityRef: z.string(),
   since: z.string().datetime().optional(),
 });
+
+/** SSE helpers */
+function setupSseHeaders(res: express.Response) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  // If you have reverse proxies that buffer, consider:
+  // res.setHeader('X-Accel-Buffering', 'no'); // nginx
+  res.flushHeaders?.(); // if compression/flushing is enabled
+}
+
+function sseSend(res: express.Response, data: unknown) {
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
 
 export function createRouter(): express.Router {
   const router = express.Router();
@@ -213,9 +235,22 @@ export function createRouter(): express.Router {
     );
 
     const evalRes = await scorecardSvc.evaluate(entityRef, scorecardId);
+
+    // Optional: emit an event that an evaluation occurred
+    const ev: BusEvent<EntityPayload> = {
+      id: `eval-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      type: 'scorecards.evaluate.completed',
+      payload: { entityRef, scorecardId, score: evalRes.score, rag: evalRes.rag },
+    };
+    // Publish on the bus and persist in history
+    // (history will also capture it via the global subscriber above)
+    bus.emit(ev);
+
     res.json(evalRes);
   });
 
+  // Polling endpoint (kept for compatibility)
   router.get('/events', (req, res) => {
     const parsed = EventsQuery.safeParse(req.query);
     if (!parsed.success) {
@@ -231,6 +266,43 @@ export function createRouter(): express.Router {
     );
 
     res.json(items);
+  });
+
+  // **New** SSE endpoint
+  router.get('/events/stream', (req, res) => {
+    const parsed = EventsQuery.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+
+    const { entityRef, since } = parsed.data;
+    setupSseHeaders(res);
+
+    // 1) Send a backlog since the provided cursor
+    const sinceTs = since ? new Date(since).getTime() : 0;
+    const backlog = eventHistory.filter(
+      e => e.payload.entityRef === entityRef && new Date(e.timestamp).getTime() >= sinceTs,
+    );
+    if (backlog.length) sseSend(res, backlog);
+
+    // const unsubscribe = bus.subscribe((e) => {
+    //   if (e.payload?.entityRef === entityRef) {
+    //     sseSend(res, e);
+    //   }
+    // });
+
+    // 3) Heartbeat to keep intermediate proxies happy
+    const heartbeat = setInterval(() => {
+      res.write(': ping\n\n');
+    }, 15000);
+
+    // TODO
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      // unsubscribe();
+      res.end();
+    });
   });
 
   router.get('/tracks', (req, res) => {
@@ -266,6 +338,24 @@ export function createRouter(): express.Router {
   router.get('/projects', (_req, res) => {
     res.json(projects);
   });
+
+  /** --- Demo event generator (optional but handy) --- */
+  // Emits a small stream of events for the example entity so the UI has something to show.
+  setInterval(() => {
+    const now = new Date();
+    const ev: BusEvent<EntityPayload> = {
+      id: `tick-${now.getTime()}`,
+      timestamp: now.toISOString(),
+      type: 'demo.tick',
+      payload: {
+        entityRef: TARGET,
+        seq: now.getTime(),
+        note: 'heartbeat',
+      },
+    };
+    bus.emit(ev);
+    // (history is already appended via the global subscriber)
+  }, 7000);
 
   return router;
 }
