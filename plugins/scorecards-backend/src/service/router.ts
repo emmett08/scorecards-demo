@@ -17,7 +17,7 @@ const bus = new EventBus();
 const projectSvc = new MemoryProjectTracker();
 
 // Keep an in-memory history to support polling / backlog on SSE.
-type EntityPayload = { entityRef: string; [k: string]: unknown };
+type EntityPayload = { entityRef: string;[k: string]: unknown };
 const eventHistory: BusEvent<EntityPayload>[] = [];
 
 // Persist all bus events in history (bounded below; we cap later).
@@ -279,28 +279,32 @@ export function createRouter(): express.Router {
     const { entityRef, since } = parsed.data;
     setupSseHeaders(res);
 
-    // 1) Send a backlog since the provided cursor
+    // 1) Send backlog
     const sinceTs = since ? new Date(since).getTime() : 0;
     const backlog = eventHistory.filter(
       e => e.payload.entityRef === entityRef && new Date(e.timestamp).getTime() >= sinceTs,
     );
     if (backlog.length) sseSend(res, backlog);
 
-    // const unsubscribe = bus.subscribe((e) => {
-    //   if (e.payload?.entityRef === entityRef) {
-    //     sseSend(res, e);
-    //   }
-    // });
+    // 2) Live subscription — `entityRef` is in scope here ✅
+    let closed = false;
+    const handler = (e: BusEvent<EntityPayload>) => {
+      if (closed) return;
+      if (e.payload?.entityRef === entityRef) {
+        sseSend(res, e);
+      }
+    };
+    bus.subscribe(handler);
 
-    // 3) Heartbeat to keep intermediate proxies happy
+    // 3) Heartbeat
     const heartbeat = setInterval(() => {
       res.write(': ping\n\n');
-    }, 15000);
+    }, 1500);
 
-    // TODO
+    // 4) Cleanup
     req.on('close', () => {
+      closed = true;
       clearInterval(heartbeat);
-      // unsubscribe();
       res.end();
     });
   });
@@ -353,9 +357,9 @@ export function createRouter(): express.Router {
         note: 'heartbeat',
       },
     };
-    bus.emit(ev);
+    void bus.emit(ev);
     // (history is already appended via the global subscriber)
-  }, 7000);
+  }, 1000);
 
   return router;
 }

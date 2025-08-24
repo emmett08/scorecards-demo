@@ -7,6 +7,6 @@
     "declaration": true,
     "emitDeclarationOnly": true
   },
-  "include": ["src/**/*.{ts,tsx}", "dev/**/*.{ts,tsx}", "config.d.ts"],
+  "include": ["src", "dev", "config.d.ts"],
   "exclude": ["dist", "node_modules"]
 }

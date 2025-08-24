@@ -8,3 +8,4 @@ export { IssueList } from './IssueList';
 export { ProjectMembershipCard } from './ProjectMembershipCard';
 export { EventStreamPanel } from './EventStreamPanel';
 export { RagPill } from './common/RagPill';
+export { ProjectList } from './ProjectList';

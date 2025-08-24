@@ -74,6 +74,24 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [events]);
 
+  // const addEvents = useCallback((list: BusEvent[]) => {
+  //   if (!list?.length) return;
+  //   setEvents(prev => {
+  //     const next = [...prev];
+  //     for (const e of list) {
+  //       const key = String(e.id ?? `${e.timestamp}:${e.type}`);
+  //       if (seenIds.current.has(key)) continue;
+  //       seenIds.current.add(key);
+  //       next.push(e);
+  //     }
+  //     // Keep last 500 for reasonable history
+  //     return next.slice(-500);
+  //   });
+  //   const lastTs = list[list.length - 1]?.timestamp;
+  //   if (lastTs) setSince(lastTs);
+  // }, []);
+
+  const sinceRef = useRef<string | undefined>(undefined);
   const addEvents = useCallback((list: BusEvent[]) => {
     if (!list?.length) return;
     setEvents(prev => {
@@ -84,70 +102,70 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
         seenIds.current.add(key);
         next.push(e);
       }
-      // Keep last 500 for reasonable history
       return next.slice(-500);
     });
     const lastTs = list[list.length - 1]?.timestamp;
-    if (lastTs) setSince(lastTs);
+    if (lastTs) sinceRef.current = lastTs;   // update cursor in ref (not state)
   }, []);
 
-  // start/stop live subscription (SSE if available; polls otherwise)
+  
   useEffect(() => {
-    let cancelled = false;
+    const cancelled = false;
+    setLoading(true);
+    setError(undefined);
 
-    async function start() {
-      setLoading(true);
-      setError(undefined);
-
-      // Clean any previous subscription
-      unsubRef.current?.();
+    // cleanup previous sub
+    if (unsubRef.current) {
+      unsubRef.current();
       unsubRef.current = null;
+    }
 
-      if (!live) { setLoading(false); return; }
+    if (!live) { setLoading(false); return; }
 
-      // Try SSE first
+    (async () => {
       try {
+        const initialSince = sinceRef.current;
+
         const unsub = await api.subscribeEvents({
           entityRef,
-          since,
-          onEvent: e => !cancelled && addEvents([e]),
-          onError: err => !cancelled && setError(err.message),
+          since: initialSince,
+          // ❌ no short-circuit returns; use blocks so the handler returns void
+          onEvent: (e) => { if (!cancelled) { addEvents([e]); } },
+          onError: (err) => { if (!cancelled) { setError(err.message); } },
         });
         unsubRef.current = unsub;
         setLoading(false);
-        return;
       } catch {
-        // fall back to polling below
-      }
-
-      // Polling fallback
-      // let timer: any;
-      const tick = async () => {
-        if (cancelled) return;
-        try {
-          const list = await api.listEvents(entityRef, since);
+        // polling fallback
+        const tick = async () => {
           if (cancelled) return;
-          addEvents(list);
-          setError(undefined);
-        } catch (e: any) {
-          if (!cancelled) setError(String(e?.message ?? e));
-        } finally {
-          setLoading(false);
-        }
-      };
-      await tick();
-      const timer = setInterval(tick, 3000);
-      unsubRef.current = () => clearInterval(timer);
-    }
+          try {
+            const list = await api.listEvents(entityRef, sinceRef.current);
+            if (cancelled) return;
+            addEvents(list);
+            setError(undefined);
+          } catch (e: any) {
+            if (!cancelled) setError(String(e?.message ?? e));
+          } finally {
+            setLoading(false);
+          }
+        };
+        await tick();
+        const timer = setInterval(tick, 3000);
+        unsubRef.current = () => clearInterval(timer);
+      }
+    })();
 
-    start();
-
-    return () => {
-      cancelled = true;
-      unsubRef.current?.();
-      unsubRef.current = null;
-    };
-  }, [api, entityRef, since, live, addEvents]);
+    // ✅ cleanup returns void; no implicit return expressions
+    // return () => {
+    //   cancelled = true;
+    //   if (unsubRef.current) {
+    //     unsubRef.current();
+    //     unsubRef.current = null;
+    //   }
+    // };
+    // IMPORTANT: do not depend on a state `since`; we use sinceRef internally
+  }, [api, entityRef, live, addEvents]);
 
   // manual refresh (one-shot poll)
   const handleRefresh = async () => {
@@ -342,7 +360,7 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
                             .map(([k, v]) => `${k}=${typeof v === 'object' ? '[obj]' : String(v)}`);
                           return entries.join(' · ');
                         }
-                      } catch {/* ignore */}
+                      } catch {/* ignore */ }
                       return '';
                     })();
 

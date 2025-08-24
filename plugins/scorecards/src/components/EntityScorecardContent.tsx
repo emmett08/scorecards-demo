@@ -1,12 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import { useApi, discoveryApiRef, identityApiRef, fetchApiRef } from '@backstage/core-plugin-api';
 import { Progress, WarningPanel, InfoCard, ResponseErrorPanel } from '@backstage/core-components';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import { TrackList } from './TrackList';
+import { IssueList } from './IssueList';
+import { Issue, Project, TrackRecord } from '@emmett08/scorecards-framework';
+import { ProjectList } from './ProjectList';
 
-type TrackRecord = { id: string; entityRef: string; checkId: string; name: string; openedAt: string; label?: string; };
-type Issue = { id: string; key: string; entityRef: string; checkId: string; title: string; severity: 'low'|'medium'|'high'; openedAt: string; };
+// type TrackRecord = { id: string; entityRef: string; checkId: string; name: string; openedAt: string; label?: string; };
+// type Issue = { id: string; key: string; entityRef: string; checkId: string; title: string; severity: 'low'|'medium'|'high'; openedAt: string; };
 
 type EvalResult = {
   scorecardId: string;
@@ -109,6 +113,7 @@ export const EntityScorecardContent: React.FC = () => {
   const [evalResult, setEvalResult] = useState<EvalResult | undefined>();
   const [tracks, setTracks] = useState<TrackRecord[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   const authedFetch = useCallback(async (input: string, init: RequestInit = {}) => {
     const { token } = await identityApi.getCredentials(); // user token (SSO / guest)
@@ -144,6 +149,11 @@ export const EntityScorecardContent: React.FC = () => {
       const isRes = await authedFetch(`${baseUrl}/issues?entityRef=${encodeURIComponent(entityRef)}`);
       if (!isRes.ok) throw new Error(`issues failed: ${isRes.status} ${isRes.statusText}`);
       setIssues(await isRes.json());
+
+      // Projects
+      const prRes = await authedFetch(`${baseUrl}/projects`);
+      if (!prRes.ok) throw new Error(`projects failed: ${prRes.status} ${prRes.statusText}`);
+      setProjects(await prRes.json());
     } catch (e: any) {
       setError(e);
     } finally {
@@ -174,7 +184,7 @@ export const EntityScorecardContent: React.FC = () => {
 
       {evalResult && <ScorecardCard data={evalResult} />}
 
-      <InfoCard title={`Tracks (${tracks.length})`}>
+      {/* <InfoCard title={`Tracks (${tracks.length})`}>
         {tracks.length === 0 ? <div>No tracks</div> : (
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {tracks.map(t => (
@@ -202,7 +212,10 @@ export const EntityScorecardContent: React.FC = () => {
             ))}
           </ul>
         )}
-      </InfoCard>
+      </InfoCard> */}
+      <TrackList tracks={tracks} />
+      <IssueList issues={issues} />
+      <ProjectList projects={projects} entityRef={entityRef} />
     </div>
   );
 };

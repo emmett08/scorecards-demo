@@ -31,23 +31,23 @@ export const scorecardsApiRef = createApiRef<ScorecardsApi>({
 type ConstructorOpts =
   | { baseUrl: string } // compatibility mode (your current usage)
   | {
-      discoveryApi: DiscoveryApi;
-      identityApi: IdentityApi;
-      fetchApi: FetchApi;
-      /** service id/path used by discovery, defaults to 'scorecards' (-> /api/scorecards) */
-      basePath?: string;
-    };
+    discoveryApi: DiscoveryApi;
+    identityApi: IdentityApi;
+    fetchApi: FetchApi;
+    /** service id/path used by discovery, defaults to 'scorecards' (-> /api/scorecards) */
+    basePath?: string;
+  };
 
 export class DefaultScorecardsApi implements ScorecardsApi {
   private readonly mode:
     | { kind: 'baseUrl'; baseUrl: string }
     | {
-        kind: 'discover';
-        discoveryApi: DiscoveryApi;
-        identityApi: IdentityApi;
-        fetchApi: FetchApi;
-        basePath: string;
-      };
+      kind: 'discover';
+      discoveryApi: DiscoveryApi;
+      identityApi: IdentityApi;
+      fetchApi: FetchApi;
+      basePath: string;
+    };
 
   constructor(opts: ConstructorOpts = { baseUrl: '/api/scorecards' }) {
     if ('baseUrl' in opts) {
@@ -134,12 +134,19 @@ export class DefaultScorecardsApi implements ScorecardsApi {
     return res.json();
   }
 
-  /**
-   * Server-Sent Events subscription.
-   * NOTE: SSE cannot set custom headers from the browser; in discover mode we append the identity token
-   * as a query param (?token=...) which your backend must accept, OR you can proxy SSE through your
-   * Backstage backend so it injects Authorization on the server side.
-   */
+  /** Join base + path safely (base is absolute from discovery) */
+  private async makeUrl(path: string, qs?: Record<string, string | undefined>) {
+    const base = await this.baseUrl();                      // e.g. http://localhost:7007/api/scorecards
+    const u = new URL(base);
+    u.pathname = `${u.pathname.replace(/\/$/, '')}${path}`; // -> /api/scorecards/path
+    if (qs) {
+      for (const [k, v] of Object.entries(qs)) {
+        if (v !== undefined) u.searchParams.set(k, v);
+      }
+    }
+    return u;
+  }
+
   async subscribeEvents(opts: {
     entityRef: string;
     since?: string;
@@ -148,48 +155,33 @@ export class DefaultScorecardsApi implements ScorecardsApi {
   }): Promise<() => void> {
     const { entityRef, since, onEvent, onError } = opts;
 
-    // Build URL
-    const base = await this.baseUrl();
-    const u = new URL(`${base}/events/stream`, window.location.origin);
-    u.pathname = `${base}/events/stream`;
-    u.searchParams.set('entityRef', entityRef);
-    if (since) u.searchParams.set('since', since);
+    const u = await this.makeUrl('/events/stream', { entityRef, since });
 
-    // Append token in discover mode if available (only if your backend supports it)
+    // Optionally include token as query param if your backend expects it for SSE
     if (this.mode.kind === 'discover') {
       try {
         const { token } = await this.mode.identityApi.getCredentials();
         if (token) u.searchParams.set('token', token);
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }
 
-    // Open EventSource
     const es = new EventSource(u.toString(), { withCredentials: true });
 
     const onMessage = (ev: MessageEvent) => {
       try {
         const data = JSON.parse(ev.data);
-        if (Array.isArray(data)) {
-          for (const e of data) onEvent(e as BusEvent);
-        } else {
-          onEvent(data as BusEvent);
-        }
+        if (Array.isArray(data)) data.forEach(d => onEvent(d as BusEvent));
+        else onEvent(data as BusEvent);
       } catch (e: any) {
         onError?.(new Error(`Bad event payload: ${e?.message ?? e}`));
       }
     };
 
-    const onErr = () => {
-      // EventSource will retry with backoff automatically
-      onError?.(new Error('Event stream error; attempting to reconnect'));
-    };
+    const onErr = () => onError?.(new Error('Event stream error; attempting to reconnect'));
 
     es.addEventListener('message', onMessage);
     es.addEventListener('error', onErr);
 
-    // Return unsubscribe
     return () => {
       es.removeEventListener('message', onMessage);
       es.removeEventListener('error', onErr);
