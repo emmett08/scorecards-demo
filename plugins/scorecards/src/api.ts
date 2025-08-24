@@ -5,6 +5,7 @@ import {
   FetchApi,
 } from '@backstage/frontend-plugin-api';
 import type { TrackRecord, Issue, Project, BusEvent } from '@emmett08/scorecards-framework';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 export interface ScorecardsApi {
   evaluate(entityRef: string, scorecardId: string): Promise<any>;
@@ -134,58 +135,40 @@ export class DefaultScorecardsApi implements ScorecardsApi {
     return res.json();
   }
 
-  /** Join base + path safely (base is absolute from discovery) */
-  private async makeUrl(path: string, qs?: Record<string, string | undefined>) {
-    const base = await this.baseUrl();                      // e.g. http://localhost:7007/api/scorecards
-    const u = new URL(base);
-    u.pathname = `${u.pathname.replace(/\/$/, '')}${path}`; // -> /api/scorecards/path
-    if (qs) {
-      for (const [k, v] of Object.entries(qs)) {
-        if (v !== undefined) u.searchParams.set(k, v);
-      }
-    }
-    return u;
-  }
-
-  async subscribeEvents(opts: {
+  async subscribeEvents({
+    entityRef,
+    since,
+    onEvent,
+    onError,
+  }: {
     entityRef: string;
     since?: string;
     onEvent: (e: BusEvent) => void;
     onError?: (err: Error) => void;
   }): Promise<() => void> {
-    const { entityRef, since, onEvent, onError } = opts;
+    const base = await this.baseUrl();
+    const ensureSlash = (s: string) => (s.endsWith('/') ? s : `${s}/`);
+    const url = new URL('events/stream', ensureSlash(base));
+    url.searchParams.set('entityRef', entityRef);
+    if (since) url.searchParams.set('since', since);
 
-    const u = await this.makeUrl('/events/stream', { entityRef, since });
-
-    // Optionally include token as query param if your backend expects it for SSE
+    let token: string | undefined;
     if (this.mode.kind === 'discover') {
-      try {
-        const { token } = await this.mode.identityApi.getCredentials();
-        if (token) u.searchParams.set('token', token);
-      } catch { /* ignore */ }
+      ({ token } = await this.mode.identityApi.getCredentials());
     }
 
-    const es = new EventSource(u.toString(), { withCredentials: true });
-
-    const onMessage = (ev: MessageEvent) => {
-      try {
+    await fetchEventSource(url.toString(), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+      onmessage: ev => {
         const data = JSON.parse(ev.data);
-        if (Array.isArray(data)) data.forEach(d => onEvent(d as BusEvent));
-        else onEvent(data as BusEvent);
-      } catch (e: any) {
-        onError?.(new Error(`Bad event payload: ${e?.message ?? e}`));
-      }
-    };
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        Array.isArray(data) ? data.forEach(onEvent) : onEvent(data);
+      },
+      onerror: err => onError?.(err as Error),
+    });
 
-    const onErr = () => onError?.(new Error('Event stream error; attempting to reconnect'));
-
-    es.addEventListener('message', onMessage);
-    es.addEventListener('error', onErr);
-
-    return () => {
-      es.removeEventListener('message', onMessage);
-      es.removeEventListener('error', onErr);
-      es.close();
-    };
+    // return a noop unsubscribe; if you need explicit abort, wire an AbortController
+    return () => {/* supply abort controller if needed */ };
   }
 }

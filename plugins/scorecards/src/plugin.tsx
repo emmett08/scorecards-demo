@@ -32,7 +32,7 @@ const scorecardsEntityContent = EntityContentBlueprint.make({
 const entityEventsContent = EntityContentBlueprint.make({
   name: 'entityEventsContent',
   params: {
-    path: 'events-stream',
+    path: 'events',
     title: 'Events',
     routeRef: entityEventsRouteRef,
     loader: () =>
