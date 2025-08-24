@@ -11,6 +11,7 @@
     "build:all": "backstage-cli repo build --all",
     "build-image": "yarn workspace backend build-image",
     "tsc": "tsc",
+    "dev": "yarn workspace backend start & yarn workspace app start",
     "tsc:full": "tsc --skipLibCheck false --incremental false",
     "clean": "backstage-cli repo clean",
     "test": "backstage-cli repo test",
@@ -22,19 +23,18 @@
     "prettier:check": "prettier --check .",
     "new": "backstage-cli new"
   },
-  "workspaces": {
-    "packages": [
-      "packages/*",
-      "plugins/*"
-    ]
-  },
+  "workspaces": [
+    "packages/*",
+    "plugins/*"
+  ],
   "devDependencies": {
     "@backstage/cli": "^0.34.0",
     "@backstage/e2e-test-utils": "^0.1.1",
     "@playwright/test": "^1.32.3",
     "node-gyp": "^10.0.0",
     "prettier": "^2.3.2",
-    "typescript": "~5.8.0"
+    "typescript": "^5.4.5",
+    "webpack": "~5.96.0"
   },
   "resolutions": {
     "@types/react": "^18",

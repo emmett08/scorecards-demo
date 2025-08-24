@@ -1,0 +1,64 @@
+{
+  "name": "@internal/plugin-scorecards",
+  "version": "0.1.0",
+  "private": true,
+  "backstage": {
+    "role": "frontend-plugin",
+    "pluginId": "scorecards"
+  },
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "lint": "backstage-cli package lint",
+    "test": "backstage-cli package test",
+    "clean": "backstage-cli package clean",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack"
+  },
+  "dependencies": {
+    "@emmett08/scorecards-framework": "0.1.11",
+    "@mui/icons-material": "^5",
+    "@mui/material": "^5",
+    "react-use": "^17.2.4"
+  },
+  "peerDependencies": {
+    "@backstage/core-app-api": "^1.18.0",
+    "@backstage/core-components": "^0.17.5",
+    "@backstage/core-plugin-api": "^1.10.9",
+    "@backstage/frontend-plugin-api": "^0.11.0",
+    "@backstage/plugin-catalog": "^1.31.2",
+    "@backstage/plugin-catalog-react": "^1.20.1",
+    "@backstage/theme": "^0.6.8",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-router-dom": "^6.23.0"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.34.0",
+    "@backstage/core-app-api": "^1.18.0",
+    "@backstage/core-components": "^0.17.5",
+    "@backstage/core-plugin-api": "^1.10.9",
+    "@backstage/dev-utils": "^1.1.13",
+    "@backstage/frontend-plugin-api": "^0.11.0",
+    "@backstage/plugin-catalog": "^1.31.2",
+    "@backstage/plugin-catalog-react": "^1.20.1",
+    "@backstage/test-utils": "^1.7.11",
+    "@testing-library/dom": "^10",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^16",
+    "@testing-library/user-event": "^14",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "react": "^18.2.0",
+    "react-router-dom": "^6.23.0",
+    "typescript": "^5.4.5",
+    "webpack": "~5.96.0"
+  }
+}
