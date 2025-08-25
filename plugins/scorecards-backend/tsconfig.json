@@ -1,8 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src"],
   "compilerOptions": {
+    "composite": true,
     "rootDir": "src",
-    "composite": true
-  }
+    "outDir": "../../dist-types/plugins/scorecards-backend",
+    "declaration": true,
+    "emitDeclarationOnly": true
+  },
+  "include": ["src/**/*.ts", "config.d.ts"],
+  "exclude": ["dist", "node_modules"]
 }

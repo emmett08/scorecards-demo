@@ -1,18 +1,14 @@
 {
   "extends": "@backstage/cli/config/tsconfig.json",
-  "include": [
-    "packages/*/src",
-    "packages/*/config.d.ts",
-    "plugins/*/src",
-    "plugins/*/config.d.ts",
-    "plugins/*/dev",
-    "plugins/*/migrations"
-  ],
-  "exclude": ["node_modules"],
   "compilerOptions": {
-    "outDir": "dist-types",
-    "rootDir": ".",
+    "baseUrl": ".",
     "jsx": "react-jsx",
     "jsxImportSource": "react",
+    "paths": {
+      "@internal/plugin-scorecards": ["plugins/scorecards/src/index.ts"],
+      "@internal/plugin-scorecards/*": ["plugins/scorecards/src/*"],
+      "@internal/plugin-scorecards-backend": ["plugins/scorecards-backend/src/index.ts"],
+      "@internal/plugin-scorecards-backend/*": ["plugins/scorecards-backend/src/*"]
+    }
   }
 }

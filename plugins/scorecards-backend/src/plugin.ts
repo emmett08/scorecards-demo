@@ -1,5 +1,5 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
-import { createRouter } from './service/router';
+import { createRouter } from './server/router/index';
 
 export const scorecardsBackendPlugin = createBackendPlugin({
   pluginId: 'scorecards',

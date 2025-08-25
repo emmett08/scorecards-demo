@@ -1,6 +1,6 @@
-import { createFrontendPlugin, PageBlueprint, NavItemBlueprint, ApiBlueprint } from '@backstage/frontend-plugin-api';
+import { createFrontendPlugin, PageBlueprint, NavItemBlueprint, ApiBlueprint, discoveryApiRef, fetchApiRef, identityApiRef } from '@backstage/frontend-plugin-api';
 import { EntityContentBlueprint } from '@backstage/plugin-catalog-react/alpha';
-import { scorecardsRootRouteRef, entityScorecardsRouteRef, viewEntityRouteRef } from './routes';
+import { scorecardsRootRouteRef, entityScorecardsRouteRef, viewEntityRouteRef, entityEventsRouteRef } from './routes';
 import { DefaultScorecardsApi, scorecardsApiRef } from './api';
 import { Assessment } from '@mui/icons-material';
 
@@ -29,22 +29,47 @@ const scorecardsEntityContent = EntityContentBlueprint.make({
   },
 });
 
+const entityEventsContent = EntityContentBlueprint.make({
+  name: 'entityEventsContent',
+  params: {
+    path: 'events',
+    title: 'Events',
+    routeRef: entityEventsRouteRef,
+    loader: () =>
+      import('./components/EntityEventsContent').then(m => <m.EntityEventsContent />),
+  },
+});
+
 const scorecardsApi = ApiBlueprint.make({
   name: 'scorecardsApi',
   params: define =>
     define({
       api: scorecardsApiRef,
-      deps: {},
-      factory: () => new DefaultScorecardsApi('/api/scorecards'),
+      deps: {
+        discoveryApi: discoveryApiRef,
+        identityApi: identityApiRef,
+        fetchApi: fetchApiRef,
+      },
+      factory: ({ discoveryApi, identityApi, fetchApi }) =>
+        new DefaultScorecardsApi({
+          discoveryApi,
+          identityApi,
+          fetchApi,
+          basePath: 'scorecards',
+        }),
     }),
 });
 
 export const scorecardsPlugin = createFrontendPlugin({
   pluginId: 'scorecards',
-  extensions: [scorecardsApi, scorecardsPage, scorecardsNavItem, scorecardsEntityContent],
-  routes: { root: scorecardsRootRouteRef, entity: entityScorecardsRouteRef },
+  extensions: [
+    scorecardsApi,
+    scorecardsPage,
+    scorecardsNavItem,
+    scorecardsEntityContent,
+    entityEventsContent,
+  ],
+  routes: { root: scorecardsRootRouteRef, entity: entityScorecardsRouteRef, events: entityEventsRouteRef },
   externalRoutes: { viewEntity: viewEntityRouteRef },
   featureFlags: [{ name: 'scorecards-enable-tab' }],
 });
-
-export default scorecardsPlugin;
