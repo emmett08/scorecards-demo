@@ -65,6 +65,9 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState<boolean>(false);
 
+  const lastEventRef = useRef<BusEvent | null>(null);
+  const [failedAfter, setFailedAfter] = useState<BusEvent | null>(null);
+
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
   const unsubRef = useRef<(() => void) | null>(null);
@@ -101,14 +104,16 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
         if (seenIds.current.has(key)) continue;
         seenIds.current.add(key);
         next.push(e);
+        lastEventRef.current = e; // <-- remember last processed event
       }
       return next.slice(-500);
     });
     const lastTs = list[list.length - 1]?.timestamp;
-    if (lastTs) sinceRef.current = lastTs;   // update cursor in ref (not state)
+    if (lastTs) sinceRef.current = lastTs;
   }, []);
 
-  
+
+
   useEffect(() => {
     const cancelled = false;
     setLoading(true);
@@ -129,23 +134,25 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
         const unsub = await api.subscribeEvents({
           entityRef,
           since: initialSince,
-          // ❌ no short-circuit returns; use blocks so the handler returns void
-          onEvent: (e) => { if (!cancelled) { addEvents([e]); } },
-          onError: (err) => { if (!cancelled) { setError(err.message); } },
+          onEvent: (e) => { addEvents([e]); },
+          onError: (err) => {
+            setError(err.message);
+            setFailedAfter(lastEventRef.current); // <-- show which event we had last
+          },
         });
         unsubRef.current = unsub;
         setLoading(false);
       } catch {
         // polling fallback
         const tick = async () => {
-          if (cancelled) return;
           try {
             const list = await api.listEvents(entityRef, sinceRef.current);
-            if (cancelled) return;
             addEvents(list);
             setError(undefined);
+            setFailedAfter(null);
           } catch (e: any) {
-            if (!cancelled) setError(String(e?.message ?? e));
+            setError(String(e?.message ?? e));
+            setFailedAfter(lastEventRef.current); // <-- show suspect event here too
           } finally {
             setLoading(false);
           }
@@ -185,6 +192,7 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
     setEvents([]);
     seenIds.current.clear();
     setSince(undefined);
+    setFailedAfter(null); // <-- reset
   };
 
   const handleExport = () => {
@@ -321,11 +329,57 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
 
         {error && (
           <Box mt={2}>
-            <Alert severity="warning">
-              Events stream issue: {error}
+            <Alert severity="warning" sx={{ alignItems: 'flex-start' }}>
+              <Stack spacing={1}>
+                <Typography variant="body2">
+                  Events stream issue: {error}
+                </Typography>
+
+                {failedAfter && (
+                  <Paper variant="outlined" sx={{ p: 1, borderRadius: 1 }}>
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                      Stream failed after this event:
+                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                      <Chip size="small" label={failedAfter.type ?? 'unknown'} />
+                      <Typography variant="body2">{fmt(failedAfter.timestamp ?? '')}</Typography>
+                      <Tooltip title="Copy payload">
+                        <IconButton size="small" onClick={() => copyPayload(failedAfter.payload)}>
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Button
+                        size="small"
+                        startIcon={<ExpandMoreIcon />}
+                        onClick={() => {
+                          const key = String(
+                            (failedAfter.id ?? `${failedAfter.timestamp}:${failedAfter.type}:0`)
+                          );
+                          setExpanded(prev => new Set(prev).add(key));
+                          // optionally scroll near bottom where most recent live events are
+                          bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        }}
+                      >
+                        Show payload
+                      </Button>
+                    </Stack>
+                    <Box
+                      component="pre"
+                      sx={{
+                        m: 0, mt: 1, p: 1, overflow: 'auto', maxHeight: 200,
+                        bgcolor: 'background.paper', borderRadius: 1, fontSize: 12,
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                      }}
+                    >
+                      {JSON.stringify(failedAfter.payload, null, 2)}
+                    </Box>
+                  </Paper>
+                )}
+              </Stack>
             </Alert>
           </Box>
         )}
+
 
         {!error && events.length === 0 && (
           <Box mt={2}>

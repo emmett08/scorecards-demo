@@ -23,7 +23,7 @@ export function ensureDemoTicker(bus: EventBus) {
     };
     // history is maintained by the global subscriber
     bus.emit(ev as any);
-  }, 1000);
+  }, 60000);
 }
 
 export function stopDemoTicker() {

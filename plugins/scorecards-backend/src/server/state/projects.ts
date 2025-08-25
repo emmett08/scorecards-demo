@@ -6,16 +6,51 @@ import {
 } from '@emmett08/scorecards-framework';
 import { isExampleWebsite } from '../lib/entityRef';
 
-export const projectSvc = new MemoryProjectTracker();
-
+// --- Single source of truth for projects (module-level array) ---
 export const projects: Project[] = [
-  { id: 'proj-1', name: 'Platform Reliability', goal: 'SLOs, incidents, change mgmt', members: new Set<string>() },
-  { id: 'proj-2', name: 'Support Quality', goal: 'Reopen rate, CSAT, TTR', members: new Set<string>() },
+  {
+    id: 'platform-reliability',
+    name: 'Platform Reliability',
+    goal: 'SLOs, incidents, change management',
+    members: new Set<string>(),
+  },
+  {
+    id: 'support-quality',
+    name: 'Support Quality',
+    goal: 'Reopen rate, Customer Satisfaction (CSAT), Time To Resolution (TTR)',
+    members: new Set<string>(),
+  },
 ];
 
-// demo membership
-projectSvc.addMember('proj-1', 'component:default/example-website');
+// Optional in-memory service (kept in sync with the array below)
+export const projectSvc = new MemoryProjectTracker();
 
+// --- Helpers: normalise and add members in BOTH stores to prevent drift ---
+const norm = (s: string) => s.toLocaleLowerCase();
+
+function addMember(projectId: string, entityRef: string) {
+  const p = projects.find(pr => pr.id === projectId);
+  if (p) p.members.add(norm(entityRef));
+  // Keep MemoryProjectTracker in sync (if used elsewhere)
+  projectSvc.addMember(projectId, norm(entityRef));
+}
+
+function addMembers(projectId: string, entityRefs: string[]) {
+  entityRefs.forEach(ref => addMember(projectId, ref));
+}
+
+// --- Website-related components we want to appear under "My Projects" ---
+const WEBSITE_COMPONENT_REFS = [
+  'component:default/example-website',
+  'component:default/example-website-frontend',
+  'component:default/example-website-admin',
+].map(norm);
+
+// --- Seed demo memberships so they appear in the UI ---
+addMembers('platform-reliability', WEBSITE_COMPONENT_REFS);
+addMembers('support-quality', WEBSITE_COMPONENT_REFS);
+
+// --- Demo artifacts (issues & tracks) for example website entities ---
 export const issuesByEntity: Record<string, Issue[]> = {};
 export const tracksByEntity: Record<string, TrackRecord[]> = {};
 
@@ -50,8 +85,12 @@ export function ensureDemoArtifacts(entityRef: string) {
   }
 }
 
+// --- DTO for UI transport (converts Set -> string[]) ---
 export type ProjectDTO = Omit<Project, 'members'> & { members: string[] };
 
 export function getProjectsDTO(): ProjectDTO[] {
-  return projects.map(p => ({ ...p, members: Array.from(p.members) }));
+  return projects.map(p => ({
+    ...p,
+    members: Array.from(p.members),
+  }));
 }
