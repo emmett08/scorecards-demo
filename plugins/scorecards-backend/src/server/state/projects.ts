@@ -71,15 +71,75 @@ export function ensureDemoArtifacts(entityRef: string) {
     ];
   }
 
+
   if (!tracksByEntity[entityRef]) {
+    const now = new Date();
+
     tracksByEntity[entityRef] = [
+      // Original track (no due/closed)
       {
         id: `trk-${entityRef}-1`,
         entityRef,
         checkId: `check-${entityRef}-1`,
         name: 'SLO compliance (30d)',
-        openedAt: new Date().toISOString(),
+        openedAt: now.toISOString(),
         label: 'Reliability',
+      } satisfies TrackRecord,
+
+      // Track 2 — has a due date in the future, still open
+      {
+        id: `trk-${entityRef}-2`,
+        entityRef,
+        checkId: `check-${entityRef}-2`,
+        name: 'Change approvals policy rollout',
+        openedAt: now.toISOString(),
+        dueAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days later
+        label: 'Governance',
+      } satisfies TrackRecord,
+
+      // Track 3 — due in the past, still open (overdue)
+      {
+        id: `trk-${entityRef}-3`,
+        entityRef,
+        checkId: `check-${entityRef}-3`,
+        name: 'Incident retrospective follow-up',
+        openedAt: now.toISOString(),
+        dueAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
+        label: 'Operations',
+      } satisfies TrackRecord,
+
+      // Track 4 — closed already, no due date
+      {
+        id: `trk-${entityRef}-4`,
+        entityRef,
+        checkId: `check-${entityRef}-4`,
+        name: 'Support process improvement',
+        openedAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString(), // opened 10d ago
+        closedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(), // closed 2d ago
+        label: 'Support',
+      } satisfies TrackRecord,
+
+      // Track 5 — had a due date but was closed before it
+      {
+        id: `trk-${entityRef}-5`,
+        entityRef,
+        checkId: `check-${entityRef}-5`,
+        name: 'Production readiness review',
+        openedAt: new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+        dueAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        closedAt: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000).toISOString(), // closed before due
+        label: 'Readiness',
+      } satisfies TrackRecord,
+
+      // Track 6 — long-running open track with far-future due
+      {
+        id: `trk-${entityRef}-6`,
+        entityRef,
+        checkId: `check-${entityRef}-6`,
+        name: 'Security control adoption',
+        openedAt: new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+        dueAt: new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString(), // 60d ahead
+        label: 'Security',
       } satisfies TrackRecord,
     ];
   }

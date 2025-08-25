@@ -27,6 +27,8 @@ type EvalResult = {
   score?: number;        // 0..1
   rag?: 'green' | 'amber' | 'red';
   evaluatedAt?: string;
+  level?: { id: string; name: string; description?: string; minScore: number };
+  levelColor?: string;
 };
 
 const toEntityRef = (kind: string, ns: string | undefined, name: string) =>
@@ -65,6 +67,17 @@ function ScorecardCard({ data }: { data: EvalResult }) {
             <div style={barBg}><div style={barFg(score)} /></div>
           </div>
           <Chip size="small" label={`RAG: ${rag}`} color={ragChipColor[rag] ?? 'default'} />
+          {data.level && (
+            <Chip
+              size="small"
+              label={`Level: ${data.level.name}`}
+              sx={{
+                bgcolor: data.levelColor || '#999',
+                color: '#000',
+                fontWeight: 600,
+              }}
+            />
+          )}
           {data.evaluatedAt && (
             <div style={{ opacity: 0.7, fontSize: 12 }}>
               evaluated {new Date(data.evaluatedAt).toLocaleString()}
