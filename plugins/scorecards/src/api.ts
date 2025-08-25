@@ -134,7 +134,7 @@ export class DefaultScorecardsApi implements ScorecardsApi {
     }
     return res.json();
   }
-
+  
   async subscribeEvents({
     entityRef,
     since,
@@ -157,18 +157,38 @@ export class DefaultScorecardsApi implements ScorecardsApi {
       ({ token } = await this.mode.identityApi.getCredentials());
     }
 
-    await fetchEventSource(url.toString(), {
+    const controller = new AbortController();
+
+    // Kick off the stream (do not await this promise).
+    fetchEventSource(url.toString(), {
+      signal: controller.signal,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       credentials: 'include',
       onmessage: ev => {
-        const data = JSON.parse(ev.data);
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        Array.isArray(data) ? data.forEach(onEvent) : onEvent(data);
+        // Some proxies/servers surface comments/heartbeats as empty messages.
+        if (!ev.data) return; // ignore empty frames safely
+
+        try {
+          const data = JSON.parse(ev.data);
+          if (Array.isArray(data)) {
+            for (const item of data) onEvent(item);
+          } else {
+            onEvent(data);
+          }
+        } catch (err) {
+          // Bad frame (e.g. truncated). Notify and abort so outer logic can reconnect.
+          onError?.(err as Error);
+          controller.abort();
+        }
       },
-      onerror: err => onError?.(err as Error),
+      onerror: err => {
+        onError?.(err as Error);
+        controller.abort();
+      },
     });
 
-    // return a noop unsubscribe; if you need explicit abort, wire an AbortController
-    return () => {/* supply abort controller if needed */ };
+    // Working unsubscribe that actually cancels the stream.
+    return () => controller.abort();
   }
+
 }
