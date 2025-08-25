@@ -340,6 +340,9 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
   const seenIds = useRef<Set<string>>(new Set());
   const unsubRef = useRef<(() => void) | null>(null);
 
+  type ConnState = 'idle' | 'connecting' | 'open' | 'polling';
+  const [conn, setConn] = useState<ConnState>('idle');
+
   // auto-scroll to newest
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -373,13 +376,10 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
 
     setLoading(true);
     setError(undefined);
+    setConn(live ? 'connecting' : 'idle');
 
     if (unsubRef.current) {
-      try {
-        unsubRef.current();
-      } catch {
-        // ignore
-      }
+      try { unsubRef.current(); } catch { /* ignore */ }
       unsubRef.current = null;
     }
 
@@ -390,29 +390,25 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
           entityRef,
           since: initialSince,
           onEvent: e => {
-            if (!cancelled) addEvents([e]);
+            if (cancelled) return;
+            addEvents([e]);
+            // mark stream as open after first data frame
+            setConn(prev => (prev === 'open' ? prev : 'open'));
           },
           onError: err => {
             if (cancelled) return;
             setError(err.message);
             setFailedAfter(lastEventRef.current);
             failures += 1;
+            setConn('connecting'); // will attempt to reconnect
 
-            try {
-              unsubRef.current?.();
-            } catch {
-              // ignore
-            }
+            try { unsubRef.current?.(); } catch { /* ignore */ }
             unsubRef.current = null;
 
             const delay = Math.min(1000 * Math.pow(2, failures), 10000);
-            if (reconnectTimer) {
-              clearTimeout(reconnectTimer);
-            }
+            if (reconnectTimer) clearTimeout(reconnectTimer);
             reconnectTimer = setTimeout(() => {
-              if (!cancelled && live) {
-                void connect();
-              }
+              if (!cancelled && live) void connect();
             }, delay);
           },
         });
@@ -421,6 +417,7 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
         failures = 0;
         setLoading(false);
       } catch {
+        // polling fallback
         const tick = async () => {
           try {
             const list = await api.listEvents(entityRef, sinceRef.current);
@@ -428,6 +425,7 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
               addEvents(list);
               setError(undefined);
               setFailedAfter(null);
+              setConn('polling');
             }
           } catch (e: any) {
             if (!cancelled) {
@@ -438,7 +436,6 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
             setLoading(false);
           }
         };
-
         await tick();
         const timer = setInterval(tick, 3000);
         unsubRef.current = () => clearInterval(timer);
@@ -453,26 +450,19 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
 
     return () => {
       cancelled = true;
-
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-      }
-
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (unsubRef.current) {
-        try {
-          unsubRef.current();
-        } catch {
-          // ignore
-        }
+        try { unsubRef.current(); } catch { /* ignore */ }
         unsubRef.current = null;
       }
+      setConn('idle');
     };
   }, [api, entityRef, live, addEvents]);
 
   const handleRefresh = async () => {
     setLoading(true);
     try {
-      const list = await api.listEvents(entityRef, since);
+      const list = await api.listEvents(entityRef, sinceRef.current);
       addEvents(list);
       setError(undefined);
     } catch (e: any) {
@@ -547,19 +537,73 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
     </Stack>
   );
 
+  const isFiltered = query.trim().length > 0 || typeFilter !== '';
+  const shownCount = filtered.length;
+  const totalCount = events.length;
+  let statusColor: string;
+  if (!live) {
+    statusColor = 'text.disabled';
+  } else if (conn === 'open') {
+    statusColor = 'success.main';
+  } else if (conn === 'connecting') {
+    statusColor = 'warning.main';
+  } else if (conn === 'polling') {
+    statusColor = 'info.main';
+  } else {
+    statusColor = 'text.disabled';
+  }
+  let statusLabel: string;
+  if (!live) {
+    statusLabel = 'Paused';
+  } else if (conn === 'open') {
+    statusLabel = 'Live';
+  } else if (conn === 'connecting') {
+    statusLabel = 'Connecting…';
+  } else if (conn === 'polling') {
+    statusLabel = 'Polling…';
+  } else {
+    statusLabel = 'Idle';
+  }
+
   return (
     <Card variant="outlined" sx={{ borderRadius: 2 }}>
       <CardHeader
         title={
-          <Stack direction="row" alignItems="center" spacing={1}>
+          <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
             <Typography variant="h6" sx={{ mr: 1 }}>Recent Events</Typography>
-            <Chip label={`${events.length} loaded`} size="small" />
-            {LiveBadge}
+            <Chip
+              size="small"
+              label={isFiltered ? `${shownCount} shown · ${totalCount} loaded` : `${totalCount} loaded`}
+            />
+            {/* small status text from conn state */}
+            <Stack direction="row" spacing={1} alignItems="center">
+              <CircleIcon fontSize="small" sx={{ color: statusColor }} />
+              <Typography variant="body2" sx={{ color: live ? 'text.secondary' : 'text.disabled' }}>
+                {statusLabel}
+              </Typography>
+
+            </Stack>
           </Stack>
         }
         subheader={<Typography variant="body2" sx={{ opacity: 0.8 }}>{entityRef}</Typography>}
         action={
           <Stack direction="row" spacing={1} alignItems="center">
+            {isFiltered && (
+              <Tooltip title="Clear filters">
+                <Button
+                  onClick={() => {
+                    setQuery('');
+                    setTypeFilter('');
+                  }}
+                  size="small"
+                  variant="text"
+                >
+                  Clear filters
+                </Button>
+              </Tooltip>
+            )}
+
+
             <Tooltip title={live ? 'Pause live stream' : 'Resume live stream'}>
               <IconButton onClick={() => setLive(v => !v)} size="small">
                 {live ? <PauseCircleOutlineIcon /> : <PlayCircleOutlineIcon />}
@@ -583,7 +627,18 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
           </Stack>
         }
       />
-      {loading && <LinearProgress />}
+      {/* Streaming indicator line (thin, unobtrusive) */}
+      {live && (conn === 'connecting' || conn === 'open') && (
+        <LinearProgress
+          variant={conn === 'connecting' ? 'query' : 'indeterminate'}
+          sx={{ height: 2 }}
+        />
+      )}
+      {/* One-shot loads when paused */}
+      {!live && loading && <LinearProgress sx={{ height: 2 }} />}
+      {/* Polling fallback indicator (keep subtle) */}
+      {conn === 'polling' && <LinearProgress sx={{ height: 2, opacity: 0.5 }} />}
+
       <CardContent sx={{ pt: 1 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="stretch">
           <TextField
