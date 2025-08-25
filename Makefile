@@ -8,3 +8,7 @@ zip-ts:
 		! -path "./.tsup/*" \
 		! -path "./dist-types/*" \
 	| zip -@ $(ZIP_NAME)
+
+clean-zip:
+	@echo "Cleaning up $(ZIP_NAME)..."
+	@rm -f $(ZIP_NAME)

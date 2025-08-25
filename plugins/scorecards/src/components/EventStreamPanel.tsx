@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BusEvent } from '@emmett08/scorecards-framework';
 import { useApi } from '@backstage/frontend-plugin-api';
 import { scorecardsApiRef } from '../api';
@@ -28,6 +28,15 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CloseIcon from '@mui/icons-material/Close';
 
 
 import DownloadIcon from '@mui/icons-material/Download';
@@ -47,7 +56,266 @@ const dtf = new Intl.DateTimeFormat(undefined, {
 
 function fmt(ts: string) { try { return dtf.format(new Date(ts)); } catch { return ts; } }
 
+const mono = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+const previewValue = (v: unknown): string => {
+  if (v === null || v === undefined) return String(v);
+
+  if (typeof v === 'string') {
+    return v.length > 40 ? `${v.slice(0, 37)}…` : v;
+  }
+
+  if (typeof v === 'number' || typeof v === 'boolean') {
+    return String(v);
+  }
+
+  if (Array.isArray(v)) return `Array(${v.length})`;
+
+  if (typeof v === 'object') return 'Object';
+
+  return String(v);
+};
+
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
 type Props = { entityRef: string };
+
+const PayloadSummary: React.FC<{
+  payload: unknown;
+  maxItems?: number;
+  onCopy?: (val: unknown) => void;
+}> = ({ payload, maxItems = 4, onCopy }) => {
+  if (!isPlainObject(payload)) {
+    return <Box component="span" sx={{ opacity: 0.6 }}>—</Box>;
+  }
+  const entries = Object.entries(payload).slice(0, maxItems);
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        gap: 0.5,
+        overflow: 'hidden',
+        whiteSpace: 'nowrap',
+        // allow horizontal scroll if many chips but keep row height stable
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        '&::-webkit-scrollbar': { display: 'none' },
+      }}
+    >
+      {entries.map(([k, v]) => (
+        <Tooltip
+          key={k}
+          arrow
+          title={
+            <Box component="pre" sx={{ m: 0, fontFamily: mono, fontSize: 12 }}>
+              {JSON.stringify(v, null, 2)}
+            </Box>
+          }
+        >
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`${k}=${previewValue(v)}`}
+            onClick={onCopy ? () => onCopy(v) : undefined}
+            sx={{
+              maxWidth: 240,
+              '.MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
+            }}
+          />
+        </Tooltip>
+      ))}
+    </Box>
+  );
+};
+
+const DefinitionList: React.FC<{ data: Record<string, unknown> }> = ({ data }) => (
+  <Stack spacing={0.75} sx={{ mt: 1 }}>
+    {Object.entries(data).map(([k, v]) => (
+      <Stack key={k} direction="row" spacing={1.5} alignItems="flex-start">
+        <Box sx={{ minWidth: 180, color: 'text.secondary', fontFamily: mono, fontSize: 12 }}>
+          {k}
+        </Box>
+        <Box
+          sx={{
+            flex: 1,
+            fontFamily: mono,
+            fontSize: 12,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {isPlainObject(v) || Array.isArray(v) ? JSON.stringify(v, null, 2) : String(v)}
+        </Box>
+      </Stack>
+    ))}
+  </Stack>
+);
+
+const EventRow: React.FC<{
+  e: BusEvent;
+  rowKey: string;
+  isOpen: boolean;
+  onToggle: (key: string) => void;
+  copyPayload: (payload: unknown) => Promise<void> | void;
+}> = ({ e, rowKey, isOpen, onToggle, copyPayload }) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [tab, setTab] = useState<'summary' | 'raw'>('summary');
+  const detailsId = `${rowKey}-details`;
+
+  return (
+    <Fragment>
+      <TableRow hover tabIndex={0}>
+        <TableCell padding="checkbox">
+          <IconButton
+            size="small"
+            aria-label={isOpen ? 'Collapse' : 'Expand'}
+            aria-expanded={isOpen}
+            aria-controls={detailsId}
+            onClick={() => onToggle(rowKey)}
+          >
+            {isOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
+        </TableCell>
+
+        <TableCell>
+          <Typography variant="body2">{fmt(e.timestamp)}</Typography>
+        </TableCell>
+
+        <TableCell>
+          <Chip size="small" label={e.type} />
+        </TableCell>
+
+        <TableCell>
+          <PayloadSummary payload={e.payload} onCopy={copyPayload} />
+        </TableCell>
+
+        <TableCell align="right">
+          <Tooltip title="Copy payload">
+            <IconButton size="small" onClick={() => copyPayload(e.payload)}>
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Open full view">
+            <IconButton size="small" onClick={() => setDialogOpen(true)}>
+              <OpenInNewIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </TableCell>
+      </TableRow>
+
+      {/* Details row */}
+      <TableRow>
+        <TableCell colSpan={5} sx={{ p: 0, borderBottom: 0 }}>
+          <Collapse in={isOpen} timeout="auto" unmountOnExit>
+            <Box
+              id={detailsId}
+              sx={{ backgroundColor: 'action.hover', borderTop: 1, borderColor: 'divider' }}
+            >
+              <Box sx={{ p: 1.5 }}>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                    Payload
+                  </Typography>
+                  <Box sx={{ flex: 1 }} />
+                  <Tooltip title="Copy JSON">
+                    <IconButton size="small" onClick={() => copyPayload(e.payload)}>
+                      <ContentCopyIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Open full view">
+                    <IconButton size="small" onClick={() => setDialogOpen(true)}>
+                      <OpenInNewIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+
+                <Tabs
+                  value={tab}
+                  onChange={(_, v) => setTab(v)}
+                  variant="scrollable"
+                  allowScrollButtonsMobile
+                >
+                  <Tab value="summary" label="Summary" />
+                  <Tab value="raw" label="Raw JSON" />
+                </Tabs>
+
+                {tab === 'summary' && isPlainObject(e.payload) && (
+                  <DefinitionList data={e.payload as Record<string, unknown>} />
+                )}
+
+                {tab === 'raw' && (
+                  <Box
+                    component="pre"
+                    sx={{
+                      m: 0,
+                      mt: 1,
+                      p: 1,
+                      overflow: 'auto',
+                      maxHeight: 320,
+                      bgcolor: 'background.paper',
+                      borderRadius: 1,
+                      fontFamily: mono,
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {JSON.stringify(e.payload, null, 2)}
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          </Collapse>
+        </TableCell>
+      </TableRow>
+
+      {/* Full-screen dialog for very large payloads */}
+      <Dialog
+        fullWidth
+        maxWidth="md"
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        scroll="paper"
+      >
+        <DialogTitle sx={{ pr: 6 }}>
+          Event payload
+          <IconButton
+            aria-label="close"
+            onClick={() => setDialogOpen(false)}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box
+            component="pre"
+            sx={{
+              m: 0,
+              p: 1,
+              overflow: 'auto',
+              maxHeight: '70vh',
+              bgcolor: 'background.paper',
+              borderRadius: 1,
+              fontFamily: mono,
+              fontSize: 13,
+              lineHeight: 1.55,
+            }}
+          >
+            {JSON.stringify(e.payload, null, 2)}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => copyPayload(e.payload)} startIcon={<ContentCopyIcon />}>
+            Copy JSON
+          </Button>
+          <Button onClick={() => setDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </Fragment>
+  );
+};
 
 export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
   const api = useApi(scorecardsApiRef);
@@ -77,23 +345,6 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [events]);
 
-  // const addEvents = useCallback((list: BusEvent[]) => {
-  //   if (!list?.length) return;
-  //   setEvents(prev => {
-  //     const next = [...prev];
-  //     for (const e of list) {
-  //       const key = String(e.id ?? `${e.timestamp}:${e.type}`);
-  //       if (seenIds.current.has(key)) continue;
-  //       seenIds.current.add(key);
-  //       next.push(e);
-  //     }
-  //     // Keep last 500 for reasonable history
-  //     return next.slice(-500);
-  //   });
-  //   const lastTs = list[list.length - 1]?.timestamp;
-  //   if (lastTs) setSince(lastTs);
-  // }, []);
-
   const sinceRef = useRef<string | undefined>(undefined);
   const addEvents = useCallback((list: BusEvent[]) => {
     if (!list?.length) return;
@@ -104,77 +355,120 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
         if (seenIds.current.has(key)) continue;
         seenIds.current.add(key);
         next.push(e);
-        lastEventRef.current = e; // <-- remember last processed event
+        lastEventRef.current = e;
       }
       return next.slice(-500);
     });
     const lastTs = list[list.length - 1]?.timestamp;
-    if (lastTs) sinceRef.current = lastTs;
+    if (lastTs) {
+      sinceRef.current = lastTs;
+      setSince(lastTs);
+    }
   }, []);
 
-
-
   useEffect(() => {
-    const cancelled = false;
+    let cancelled = false;
+    let failures = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     setLoading(true);
     setError(undefined);
 
-    // cleanup previous sub
     if (unsubRef.current) {
-      unsubRef.current();
+      try {
+        unsubRef.current();
+      } catch {
+        // ignore
+      }
       unsubRef.current = null;
     }
 
-    if (!live) { setLoading(false); return; }
-
-    (async () => {
+    const connect = async () => {
       try {
         const initialSince = sinceRef.current;
-
         const unsub = await api.subscribeEvents({
           entityRef,
           since: initialSince,
-          onEvent: (e) => { addEvents([e]); },
-          onError: (err) => {
+          onEvent: e => {
+            if (!cancelled) addEvents([e]);
+          },
+          onError: err => {
+            if (cancelled) return;
             setError(err.message);
-            setFailedAfter(lastEventRef.current); // <-- show which event we had last
+            setFailedAfter(lastEventRef.current);
+            failures += 1;
+
+            try {
+              unsubRef.current?.();
+            } catch {
+              // ignore
+            }
+            unsubRef.current = null;
+
+            const delay = Math.min(1000 * Math.pow(2, failures), 10000);
+            if (reconnectTimer) {
+              clearTimeout(reconnectTimer);
+            }
+            reconnectTimer = setTimeout(() => {
+              if (!cancelled && live) {
+                void connect();
+              }
+            }, delay);
           },
         });
+
         unsubRef.current = unsub;
+        failures = 0;
         setLoading(false);
       } catch {
-        // polling fallback
         const tick = async () => {
           try {
             const list = await api.listEvents(entityRef, sinceRef.current);
-            addEvents(list);
-            setError(undefined);
-            setFailedAfter(null);
+            if (!cancelled) {
+              addEvents(list);
+              setError(undefined);
+              setFailedAfter(null);
+            }
           } catch (e: any) {
-            setError(String(e?.message ?? e));
-            setFailedAfter(lastEventRef.current); // <-- show suspect event here too
+            if (!cancelled) {
+              setError(String(e?.message ?? e));
+              setFailedAfter(lastEventRef.current);
+            }
           } finally {
             setLoading(false);
           }
         };
+
         await tick();
         const timer = setInterval(tick, 3000);
         unsubRef.current = () => clearInterval(timer);
       }
-    })();
+    };
 
-    // ✅ cleanup returns void; no implicit return expressions
-    // return () => {
-    //   cancelled = true;
-    //   if (unsubRef.current) {
-    //     unsubRef.current();
-    //     unsubRef.current = null;
-    //   }
-    // };
-    // IMPORTANT: do not depend on a state `since`; we use sinceRef internally
+    if (live) {
+      void connect();
+    } else {
+      setLoading(false);
+    }
+
+    return () => {
+      cancelled = true;
+
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+
+      if (unsubRef.current) {
+        try {
+          unsubRef.current();
+        } catch {
+          // ignore
+        }
+        unsubRef.current = null;
+      }
+    };
   }, [api, entityRef, live, addEvents]);
 
-  // manual refresh (one-shot poll)
   const handleRefresh = async () => {
     setLoading(true);
     try {
@@ -192,7 +486,7 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
     setEvents([]);
     seenIds.current.clear();
     setSince(undefined);
-    setFailedAfter(null); // <-- reset
+    setFailedAfter(null);
   };
 
   const handleExport = () => {
@@ -356,7 +650,6 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
                             (failedAfter.id ?? `${failedAfter.timestamp}:${failedAfter.type}:0`)
                           );
                           setExpanded(prev => new Set(prev).add(key));
-                          // optionally scroll near bottom where most recent live events are
                           bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
                         }}
                       >
@@ -402,88 +695,22 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
                 </TableHead>
                 <TableBody>
                   {filtered.slice().reverse().map((e, idx) => {
-                    const key = String(e.id ?? `${e.timestamp}:${e.type}:${idx}`);
-                    const isOpen = expanded.has(key);
-
-                    // lightweight summary (first-level keys)
-                    const payloadSummary = (() => {
-                      try {
-                        if (e?.payload && typeof e.payload === 'object') {
-                          const entries = Object.entries(e.payload as Record<string, unknown>)
-                            .slice(0, 4)
-                            .map(([k, v]) => `${k}=${typeof v === 'object' ? '[obj]' : String(v)}`);
-                          return entries.join(' · ');
-                        }
-                      } catch {/* ignore */ }
-                      return '';
-                    })();
+                    const rowKey = String(e.id ?? `${e.timestamp}:${e.type}:${idx}`);
+                    const isOpen = expanded.has(rowKey);
 
                     return (
-                      <React.Fragment key={key}>
-                        <TableRow hover tabIndex={0}>
-                          <TableCell padding="checkbox">
-                            <IconButton
-                              size="small"
-                              aria-label={isOpen ? 'Collapse' : 'Expand'}
-                              onClick={() => toggleExpand(key)}
-                            >
-                              {isOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                            </IconButton>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">{fmt(e.timestamp)}</Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip size="small" label={e.type} />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" noWrap title={payloadSummary}>
-                              {payloadSummary || <Box component="span" sx={{ opacity: 0.6 }}>—</Box>}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Tooltip title="Copy payload">
-                              <IconButton size="small" onClick={() => copyPayload(e.payload)}>
-                                <ContentCopyIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-
-                        {isOpen && (
-                          <TableRow>
-                            <TableCell />
-                            <TableCell colSpan={4} sx={{ backgroundColor: 'action.hover', p: 0 }}>
-                              <Box sx={{ p: 1.5 }}>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                                  Payload
-                                </Typography>
-                                <Box
-                                  component="pre"
-                                  sx={{
-                                    m: 0,
-                                    mt: 0.5,
-                                    p: 1,
-                                    overflow: 'auto',
-                                    maxHeight: 240,
-                                    bgcolor: 'background.paper',
-                                    borderRadius: 1,
-                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                                    fontSize: 12,
-                                    lineHeight: 1.5,
-                                  }}
-                                >
-                                  {JSON.stringify(e.payload, null, 2)}
-                                </Box>
-                              </Box>
-                              <Divider />
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </React.Fragment>
+                      <EventRow
+                        key={rowKey}
+                        e={e}
+                        rowKey={rowKey}
+                        isOpen={isOpen}
+                        onToggle={toggleExpand}
+                        copyPayload={copyPayload}
+                      />
                     );
                   })}
                 </TableBody>
+
               </Table>
             </TableContainer>
             <div ref={bottomRef} />
