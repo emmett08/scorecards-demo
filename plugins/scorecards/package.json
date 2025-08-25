@@ -23,7 +23,7 @@
     "postpack": "backstage-cli package postpack"
   },
   "dependencies": {
-    "@emmett08/scorecards-framework": "0.1.11",
+    "@emmett08/scorecards-framework": "0.1.13",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@mui/icons-material": "^5",
     "@mui/material": "^5",

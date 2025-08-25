@@ -8,6 +8,7 @@ import {
   StoreBackedFactProvider,
 } from '@emmett08/scorecards-framework';
 import type { BusEvent } from '@emmett08/scorecards-framework';
+import { LevelledScorecardService, type LevelPolicy, type LevelDefinition } from '@emmett08/scorecards-framework';
 import { EvalBody } from '../../lib/schemas';
 import { ensureDemoArtifacts } from '../../state/projects';
 import { isExampleWebsite } from '../../lib/entityRef';
@@ -16,6 +17,35 @@ import { store } from '../../state/store';
 import { createScorecardService } from '../../services/scorecards';
 import { bus } from '../../state/bus';
 import type { EntityPayload } from '../../state/history';
+
+const levelPalette: Record<string, string> = {
+  baseline:  '#9e9e9e',
+  hygiene:   '#64b5f6',
+  reliable:  '#81c784',
+  compliant: '#ffd54f',
+  exemplary: '#7e57c2',
+};
+
+const levelsPolicy: LevelPolicy = (def) => {
+  const ids = new Set<string>(
+    (def.checks ?? [])
+      .map(c => (c as any)?.check?.id || (c as any)?.id)
+      .filter(Boolean),
+  );
+
+  const req = (...wanted: string[]) => wanted.filter(w => ids.has(w));
+
+  const levels: LevelDefinition[] = [
+    { id: 'baseline',  name: 'Baseline',  minScore: 0.30 },
+    { id: 'hygiene',   name: 'Hygiene',   minScore: 0.50, requiredChecks: req('change-approval') },
+    { id: 'reliable',  name: 'Reliable',  minScore: 0.70, requiredChecks: req('slo-budget', 'change-approval') },
+    // “Compliant” & “Exemplary” tighten requirements but only on checks that exist
+    { id: 'compliant', name: 'Compliant', minScore: 0.85, requiredChecks: req('slo-budget','change-approval','incident-mttr','support-reopen','opa-production-readiness') },
+    { id: 'exemplary', name: 'Exemplary', minScore: 0.95, requiredChecks: req('slo-budget','change-approval','incident-mttr','support-reopen','opa-production-readiness') },
+  ];
+
+  return levels;
+};
 
 export function registerEvaluateRoutes(router: express.Router) {
   router.post('/evaluate', async (req, res) => {
@@ -63,7 +93,11 @@ export function registerEvaluateRoutes(router: express.Router) {
     const facts = new StoreBackedFactProvider(store);
     const scorecardSvc = createScorecardService(facts, bus);
 
-    const evalRes = await scorecardSvc.evaluate(entityRef, scorecardId);
+    const withLevels = new LevelledScorecardService(bus, levelsPolicy);
+    const def: any = { id: scorecardId, name: scorecardId, checks: [] }; // minimal def
+    const coreShim = { evaluate: (d: any, ref: string) => scorecardSvc.evaluate(ref, d.id) };
+    const evalRes = await withLevels.evaluate(coreShim as any, def as any, entityRef);
+    const levelColor = evalRes.level ? levelPalette[evalRes.level.id] : undefined;
 
     // Emit a bus event (captured into history by the global subscriber)
     const ev: BusEvent<EntityPayload> = {
@@ -74,6 +108,6 @@ export function registerEvaluateRoutes(router: express.Router) {
     };
     bus.emit(ev);
 
-    res.json(evalRes);
+    res.json({ ...evalRes, levelColor });
   });
 }

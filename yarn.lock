@@ -4571,13 +4571,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@emmett08/scorecards-framework@npm:0.1.11":
-  version: 0.1.11
-  resolution: "@emmett08/scorecards-framework@npm:0.1.11::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40emmett08%2Fscorecards-framework%2F0.1.11%2F44b9aeba23f9eee1be7bbf9fd6912e42d1027faa"
+"@emmett08/scorecards-framework@npm:0.1.13":
+  version: 0.1.13
+  resolution: "@emmett08/scorecards-framework@npm:0.1.13::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40emmett08%2Fscorecards-framework%2F0.1.13%2F1e621e6bdac098b88def25520f8ac99a8b0e700d"
   dependencies:
     "@microsoft/api-extractor": "npm:^7.52.11"
     "@types/node": "npm:^24.3.0"
-  checksum: 10c0/20673512e681d5a31bf3519fa68fdb194e95c0ae7d13a7f51fd3bfb799888dc8ec62f0f188acb14f51f43d6abbc7457585094d3467964c6a0cb31f7ded33eb95
+  checksum: 10c0/8fc46cf9e7451d8f6afe30f2d02e226f215f21863c6569fd0e17e9c82961ff25e71f4e25910586155015d86ead0602928d39d537950307dc576dc426602aea4e
   languageName: node
   linkType: hard
 
@@ -5773,7 +5773,7 @@ __metadata:
     "@backstage/cli": "npm:^0.34.0"
     "@backstage/errors": "npm:^1.2.7"
     "@backstage/plugin-catalog-node": "npm:^1.18.0"
-    "@emmett08/scorecards-framework": "npm:0.1.11"
+    "@emmett08/scorecards-framework": "npm:0.1.13"
     "@types/express": "npm:^4.17.6"
     "@types/supertest": "npm:^2.0.12"
     express: "npm:^4.17.1"
@@ -5797,7 +5797,7 @@ __metadata:
     "@backstage/plugin-catalog": "npm:^1.31.2"
     "@backstage/plugin-catalog-react": "npm:^1.20.1"
     "@backstage/test-utils": "npm:^1.7.11"
-    "@emmett08/scorecards-framework": "npm:0.1.11"
+    "@emmett08/scorecards-framework": "npm:0.1.13"
     "@microsoft/fetch-event-source": "npm:^2.0.1"
     "@mui/icons-material": "npm:^5"
     "@mui/material": "npm:^5"
@@ -29572,6 +29572,7 @@ __metadata:
   dependencies:
     "@backstage/cli": "npm:^0.34.0"
     "@backstage/e2e-test-utils": "npm:^0.1.1"
+    "@emmett08/scorecards-framework": "npm:0.1.13"
     "@playwright/test": "npm:^1.32.3"
     node-gyp: "npm:^10.0.0"
     prettier: "npm:^2.3.2"
