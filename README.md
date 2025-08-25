@@ -1,13 +1,12 @@
-# Scorecards Framework
+# Scorecards Demo
 
-This repository contains the **Scorecards Framework**, developed to provide a flexible way to build and evaluate scorecards for different systems and use cases.
+This repository demonstrates the use of the [Scorecards Framework](https://github.com/emmett08/scorecards-framework) by providing example scorecards and event flows.
 
 ## ⚠️ Disclaimer
-This framework was created with the assistance of **ChatGPT-5** and completed in **under 8 hours**.  
-It is provided as-is and should be reviewed and tested before using in production environments.
-
-You can also find the package published at:  
-[https://github.com/emmett08/scorecards-framework](https://github.com/emmett08/scorecards-framework)
+This demo was created with the assistance of **ChatGPT-5** and completed in **under 8 hours**.  
+It is provided as-is and should be reviewed and tested before using in production environments.  
+For the underlying framework, please see:  
+👉 [Scorecards Framework Repository](https://github.com/emmett08/scorecards-framework)
 
 ## Visuals
 
