@@ -20,6 +20,19 @@ import IconButton from '@mui/material/IconButton';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import GroupsIcon from '@mui/icons-material/Groups';
 import { FC, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { parseEntityRef } from '@backstage/catalog-model';
+
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Avatar from '@mui/material/Avatar';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
 
 type Props = {
   projects: Project[];
@@ -48,6 +61,20 @@ export const ProjectList: FC<Props> = ({
   defaultMineOnly = true,
 }) => {
   const [mineOnly, setMineOnly] = useState<boolean>(defaultMineOnly);
+  const navigate = useNavigate();
+const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+const [membersDialogProject, setMembersDialogProject] = useState<Project | null>(null);
+
+const openMembers = (p: Project) => {
+  setMembersDialogProject(p);
+  setMembersDialogOpen(true);
+};
+
+const closeMembers = () => {
+  setMembersDialogOpen(false);
+  setMembersDialogProject(null);
+};
+  // Memoize the filtered & sorted list
   const filtered = useMemo(() => {
     const list = mineOnly
       ? projects.filter(p => membersAsArray(p.members).includes(entityRef))
@@ -148,15 +175,21 @@ export const ProjectList: FC<Props> = ({
                     <TableCell>
                       <Typography variant="body2" noWrap title={p.goal}>{p.goal}</Typography>
                     </TableCell>
-                    <TableCell align="right">
-                      <Chip
-                        size="small"
-                        icon={<GroupsIcon />}
-                        label={members.length}
-                        variant={iAmMember ? 'filled' : 'outlined'}
-                        color={iAmMember ? 'primary' : 'default'}
-                      />
-                    </TableCell>
+<TableCell align="right">
+  <Tooltip title="View members">
+    <Chip
+      size="small"
+      icon={<GroupsIcon />}
+      label={members.length}
+      variant={iAmMember ? 'filled' : 'outlined'}
+      color={iAmMember ? 'primary' : 'default'}
+      onClick={() => openMembers(p)}
+      clickable
+    />
+  </Tooltip>
+</TableCell>
+
+
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
                         <Tooltip title={p.id}>
@@ -181,6 +214,66 @@ export const ProjectList: FC<Props> = ({
             </TableBody>
           </Table>
         </TableContainer>
+        <Dialog
+  fullWidth
+  maxWidth="sm"
+  open={membersDialogOpen}
+  onClose={closeMembers}
+  scroll="paper"
+>
+  <DialogTitle>
+    {membersDialogProject ? `Members · ${membersDialogProject.name}` : 'Members'}
+  </DialogTitle>
+  <DialogContent dividers>
+    {!membersDialogProject || membersAsArray(membersDialogProject.members).length === 0 ? (
+      <Alert severity="info">No members in this project.</Alert>
+    ) : (
+      <List dense>
+        {membersAsArray(membersDialogProject.members).map(ref => {
+          // ref is like 'component:default/example-website'
+          let caption = ref;
+          let to = '';
+          try {
+            const { kind, namespace, name } = parseEntityRef(ref);
+            caption = `${kind}:${namespace}/${name}`;
+            // Backstage default path shape
+            to = `/catalog/${namespace}/${kind}/${name}`;
+          } catch {
+            // keep raw ref if parsing fails
+          }
+
+          const initials = (() => {
+            const parts = caption.split(/[/:]/).filter(Boolean);
+            const last = parts[parts.length - 1] ?? '';
+            return last.slice(0, 2).toUpperCase();
+          })();
+
+          return (
+            <ListItemButton
+              key={ref}
+              onClick={() => {
+                if (to) navigate(to);
+                else navigator.clipboard.writeText(ref);
+              }}
+            >
+              <ListItemIcon>
+                <Avatar sx={{ width: 28, height: 28, fontSize: 12 }}>{initials}</Avatar>
+              </ListItemIcon>
+              <ListItemText
+                primary={<Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{caption}</Typography>}
+                secondary={ref !== caption ? ref : undefined}
+              />
+            </ListItemButton>
+          );
+        })}
+      </List>
+    )}
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={closeMembers}>Close</Button>
+  </DialogActions>
+</Dialog>
+
       </CardContent>
     </Card>
   );

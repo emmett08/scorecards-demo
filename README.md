@@ -15,3 +15,6 @@ For the underlying framework, please see:
 
 ### Events Flow
 ![Events](events.png)
+
+### Demo Video
+<video src="./demo.mov" controls width="600"></video>
