@@ -5788,6 +5788,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@internal/plugin-scorecards@workspace:plugins/scorecards"
   dependencies:
+    "@backstage/catalog-model": "npm:^1.7.5"
     "@backstage/cli": "npm:^0.34.0"
     "@backstage/core-app-api": "npm:^1.18.0"
     "@backstage/core-components": "npm:^0.17.5"
