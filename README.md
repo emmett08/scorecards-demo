@@ -17,4 +17,4 @@ For the underlying framework, please see:
 ![Events](events.png)
 
 ### Demo Video
-[Watch the demo video](./demo.mov)
+![Demo](demo.gif)
