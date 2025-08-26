@@ -10,11 +10,5 @@ For the underlying framework, please see:
 
 ## Visuals
 
-### Scorecards Overview
-![Scorecards](scorecards.png)
-
-### Events Flow
-![Events](events.png)
-
 ### Demo Video
 ![Demo](demo.gif)
