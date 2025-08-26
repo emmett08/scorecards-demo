@@ -17,4 +17,4 @@ For the underlying framework, please see:
 ![Events](events.png)
 
 ### Demo Video
-<video src="./demo.mov" controls width="600"></video>
+[Watch the demo video](./demo.mov)
