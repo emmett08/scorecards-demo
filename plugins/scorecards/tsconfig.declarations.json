@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+
+    "jsx": "react-jsx",
+
+    "jsxImportSource": "react",
+    "lib": ["ES2021", "DOM"],
+    "types": ["react", "react-dom"],
+
+    "rootDir": "src",
+    "outDir": "../../dist-types/plugins/scorecards/dist",
+
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

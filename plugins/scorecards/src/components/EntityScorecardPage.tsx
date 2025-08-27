@@ -5,18 +5,20 @@ import { useEntity } from '@backstage/plugin-catalog-react';
 import { useApi } from '@backstage/frontend-plugin-api';
 import { scorecardsApiRef } from '../api';
 
-import type {
-  TrackRecord,
-  Issue,
-  Project,
-} from '@emmett08/scorecards-framework';
+import type { TrackRecord, Issue, Project } from '@emmett08/scorecards-framework';
 
 import { ScorecardHeader } from './ScorecardHeader';
 import { ChecksTable } from './ChecksTable';
 import { TrackList } from './TrackList';
 import { IssueList } from './IssueList';
 import { ProjectMembershipCard } from './ProjectMembershipCard';
-import { EventStreamPanel } from './EventStreamPanel';
+// import { EventStreamPanel } from './EventStreamPanel';
+
+import type {
+  ScorecardResult as FrameworkScorecardResult,
+} from '@emmett08/scorecards-framework';
+
+import { mapEvaluateResponseToRows } from '../adapters/scorecards'; // mapEvaluateResponseToRows preferred; mapResultToRow kept for compat
 
 export const EntityScorecardPage: FC<{ scorecardId?: string }> = ({
   scorecardId = 'compliance',
@@ -24,10 +26,9 @@ export const EntityScorecardPage: FC<{ scorecardId?: string }> = ({
   const { entity } = useEntity();
   const api = useApi(scorecardsApiRef);
 
-  const entityRef =
-    `${entity.kind.toLowerCase()}:${entity.metadata.namespace || 'default'}/${entity.metadata.name}`;
+  const entityRef = `${entity.kind.toLowerCase()}:${entity.metadata.namespace || 'default'}/${entity.metadata.name}`;
 
-  const [evalData, setEvalData] = useState<any | null>(null);
+  const [evalData, setEvalData] = useState<FrameworkScorecardResult | null>(null);
   const [tracks, setTracks] = useState<TrackRecord[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -55,25 +56,25 @@ export const EntityScorecardPage: FC<{ scorecardId?: string }> = ({
       .catch(e => !cancelled && setError(String(e)))
       .finally(() => !cancelled && setLoading(false));
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [entityRef, scorecardId, api]);
 
   if (loading) return <div>Loading scorecard…</div>;
   if (error) return <div style={{ color: '#b00020' }}>Failed to load: {error}</div>;
   if (!evalData) return <div>No data</div>;
 
+  const uiRows = mapEvaluateResponseToRows(evalData.results);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <ScorecardHeader data={evalData} />
-      <ChecksTable results={evalData.results} />
+      <ChecksTable checks={uiRows} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <TrackList tracks={tracks} />
         <IssueList issues={issues} />
       </div>
       <ProjectMembershipCard projects={projects} entityRef={entityRef} />
-      <EventStreamPanel entityRef={entityRef} />
+      {/* <EventStreamPanel entityRef={entityRef} /> */}
     </div>
   );
 };

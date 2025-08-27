@@ -9,7 +9,6 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -322,7 +321,7 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
 
   // data/state
   const [events, setEvents] = useState<BusEvent[]>([]);
-  const [since, setSince] = useState<string | undefined>(undefined);
+  const [, setSince] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [live, setLive] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
@@ -528,14 +527,14 @@ export const EventStreamPanel: React.FC<Props> = ({ entityRef }) => {
     }
   };
 
-  const LiveBadge = (
-    <Stack direction="row" spacing={1} alignItems="center">
-      <CircleIcon fontSize="small" sx={{ color: live ? 'success.main' : 'text.disabled' }} />
-      <Typography variant="body2" sx={{ color: live ? 'success.main' : 'text.secondary' }}>
-        {live ? 'Live' : 'Paused'}
-      </Typography>
-    </Stack>
-  );
+  // const LiveBadge = (
+  //   <Stack direction="row" spacing={1} alignItems="center">
+  //     <CircleIcon fontSize="small" sx={{ color: live ? 'success.main' : 'text.disabled' }} />
+  //     <Typography variant="body2" sx={{ color: live ? 'success.main' : 'text.secondary' }}>
+  //       {live ? 'Live' : 'Paused'}
+  //     </Typography>
+  //   </Stack>
+  // );
 
   const isFiltered = query.trim().length > 0 || typeFilter !== '';
   const shownCount = filtered.length;

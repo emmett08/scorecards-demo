@@ -12,10 +12,19 @@
   "files": [
     "dist"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./dist/index.esm.js",
+    "./tokens.css": "./dist/styles/tokens.css",
+    "./globals.css": "./dist/styles/globals.css"
+  },
   "scripts": {
     "start": "backstage-cli package start",
-    "build": "backstage-cli package build",
+    "tsc:types": "tsc -p tsconfig.declarations.json",
+    "build": "yarn tsc:types && backstage-cli package build && yarn build:css",
+    "build:css": "shx rm -rf dist/styles && shx mkdir -p dist/styles && shx cp -r src/styles/* dist/styles/",
     "lint": "backstage-cli package lint",
     "test": "backstage-cli package test",
     "clean": "backstage-cli package clean",
@@ -60,6 +69,7 @@
     "@types/react-dom": "^18",
     "react": "^18.2.0",
     "react-router-dom": "^6.23.0",
+    "shx": "^0.4.0",
     "typescript": "^5.4.5",
     "webpack": "~5.96.0"
   }
