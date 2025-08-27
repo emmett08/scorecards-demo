@@ -18,10 +18,47 @@ import { createScorecardService } from '../../services/scorecards';
 import { bus } from '../../state/bus';
 import type { EntityPayload } from '../../state/history';
 
+const STALE_AFTER_HOURS = 24 * 7;
+export type UIStatus = 'pass' | 'warn' | 'fail' | 'stale' | 'unknown';
+
+function classifyStatus(passed: boolean, severity: 'low' | 'medium' | 'high', updatedAtIso: string): UIStatus {
+  if (!updatedAtIso) return 'unknown';
+  const ageHrs = (Date.now() - new Date(updatedAtIso).getTime()) / 3_600_000;
+
+  if (passed) {
+    if (ageHrs > STALE_AFTER_HOURS) {
+      return 'stale';
+    }
+    return 'pass';
+  } else if (severity === 'high') {
+    return 'fail';
+  }
+  return 'warn';
+
+}
+
+function makeDummyTrend(points: number, base: number): number[] {
+  const out: number[] = [];
+  let seed = 42; // deterministic
+  let i = 0;
+  while (i < points) {
+    // simple pseudo-random in [0,1)
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    const n = (seed >>> 0) / 4294967296;
+    // small wiggle +-0.2 around base
+    const v = base + (n - 0.5) * 0.4;
+    // clamp to [0,5], 2 decimals
+    const clamped = Math.max(0, Math.min(5, v));
+    out.push(Number(clamped.toFixed(2)));
+    i += 1;
+  }
+  return out;
+}
+
 const levelPalette: Record<string, string> = {
-  baseline:  '#9e9e9e',
-  hygiene:   '#64b5f6',
-  reliable:  '#81c784',
+  baseline: '#9e9e9e',
+  hygiene: '#64b5f6',
+  reliable: '#81c784',
   compliant: '#ffd54f',
   exemplary: '#7e57c2',
 };
@@ -36,12 +73,12 @@ const levelsPolicy: LevelPolicy = (def) => {
   const req = (...wanted: string[]) => wanted.filter(w => ids.has(w));
 
   const levels: LevelDefinition[] = [
-    { id: 'baseline',  name: 'Baseline',  minScore: 0.30 },
-    { id: 'hygiene',   name: 'Hygiene',   minScore: 0.50, requiredChecks: req('change-approval') },
-    { id: 'reliable',  name: 'Reliable',  minScore: 0.70, requiredChecks: req('slo-budget', 'change-approval') },
+    { id: 'baseline', name: 'Baseline', minScore: 0.30 },
+    { id: 'hygiene', name: 'Hygiene', minScore: 0.50, requiredChecks: req('change-approval') },
+    { id: 'reliable', name: 'Reliable', minScore: 0.70, requiredChecks: req('slo-budget', 'change-approval') },
     // “Compliant” & “Exemplary” tighten requirements but only on checks that exist
-    { id: 'compliant', name: 'Compliant', minScore: 0.85, requiredChecks: req('slo-budget','change-approval','incident-mttr','support-reopen','opa-production-readiness') },
-    { id: 'exemplary', name: 'Exemplary', minScore: 0.95, requiredChecks: req('slo-budget','change-approval','incident-mttr','support-reopen','opa-production-readiness') },
+    { id: 'compliant', name: 'Compliant', minScore: 0.85, requiredChecks: req('slo-budget', 'change-approval', 'incident-mttr', 'support-reopen', 'opa-production-readiness') },
+    { id: 'exemplary', name: 'Exemplary', minScore: 0.95, requiredChecks: req('slo-budget', 'change-approval', 'incident-mttr', 'support-reopen', 'opa-production-readiness') },
   ];
 
   return levels;
@@ -98,7 +135,41 @@ export function registerEvaluateRoutes(router: express.Router) {
     const coreShim = { evaluate: (d: any, ref: string) => scorecardSvc.evaluate(ref, d.id) };
     const evalRes = await withLevels.evaluate(coreShim as any, def as any, entityRef);
     const levelColor = evalRes.level ? levelPalette[evalRes.level.id] : undefined;
+    const nowIso = new Date().toISOString();
+    const enhancedResults = (evalRes.results ?? []).map((r: any) => {
+      const updatedAt: string = r.evaluatedAt ?? evalRes.evaluatedAt ?? nowIso;
 
+      // let status: UIStatus;
+      // if (r.passed) {
+      //   status = 'pass';
+      // } else if (r.severity === 'high') {
+      //   status = 'fail';
+      // } else {
+      //   status = 'warn';
+      // }
+
+      // choose a base around the current numeric value if present, otherwise from pass/fail
+      const numeric = typeof r.value === 'number' ? r.value : undefined;
+      let base: number;
+
+      if (typeof numeric === 'number') {
+        // Clamp to [0,5]
+        base = Math.max(0, Math.min(5, Number(numeric)));
+      } else {
+        if (r.passed) {
+          base = 4.0;
+        } else {
+          base = 2.5;
+        }
+      }
+
+      return {
+        ...r,
+        status: classifyStatus(r.passed, r.severity ?? 'medium', updatedAt),
+        trend: makeDummyTrend(12, base),
+        updatedAt,
+      };
+    });
     // Emit a bus event (captured into history by the global subscriber)
     const ev: BusEvent<EntityPayload> = {
       id: `eval-${Date.now()}`,
@@ -108,6 +179,6 @@ export function registerEvaluateRoutes(router: express.Router) {
     };
     bus.emit(ev);
 
-    res.json({ ...evalRes, levelColor });
+    res.json({ ...evalRes, results: enhancedResults, levelColor });
   });
 }

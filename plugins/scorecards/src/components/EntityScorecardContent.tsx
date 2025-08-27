@@ -9,8 +9,9 @@ import { IssueList } from './IssueList';
 import { Issue, Project, TrackRecord } from '@emmett08/scorecards-framework';
 import { ProjectList } from './ProjectList';
 
-// type TrackRecord = { id: string; entityRef: string; checkId: string; name: string; openedAt: string; label?: string; };
-// type Issue = { id: string; key: string; entityRef: string; checkId: string; title: string; severity: 'low'|'medium'|'high'; openedAt: string; };
+import { ChecksTable } from './ChecksTable';
+import type { ScoreStatus, ChecksTableRow, UICheck } from '../types/ui';
+import { mapEvaluateResponseToRows } from '../adapters/scorecards';
 
 type EvalResult = {
   scorecardId: string;
@@ -20,9 +21,12 @@ type EvalResult = {
     name: string;
     passed: boolean;
     severity: 'low' | 'medium' | 'high';
-    summary?: string;
+    summary: string;
     evidence?: any[];
+    status?: ScoreStatus;
+    trend?: number[];
     evaluatedAt?: string;
+    updatedAt?: string;
   }>;
   score?: number;        // 0..1
   rag?: 'green' | 'amber' | 'red';
@@ -85,25 +89,7 @@ function ScorecardCard({ data }: { data: EvalResult }) {
           )}
         </div>
 
-        <div>
-          <strong>Checks</strong>
-          <ul style={{ margin: '6px 0 0 18px' }}>
-            {data.results?.map(r => (
-              <li key={r.checkId} style={{ marginBottom: 6 }}>
-                <span style={{ marginRight: 6 }}>{r.passed ? '✅' : '❌'}</span>
-                <strong>{r.name}</strong>
-                <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
-                  [{r.severity.toUpperCase()}]{r.summary ? ` — ${r.summary}` : ''}
-                </span>
-                {r.evidence?.[0]?.key && (
-                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
-                    evidence: <code>{r.evidence[0].key}</code> = {String(r.evidence[0].value)}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* (Old bullet list of checks is replaced by ChecksTable below) */}
       </div>
     </InfoCard>
   );
@@ -174,6 +160,32 @@ export const EntityScorecardContent: React.FC = () => {
     }
   }, [discoveryApi, authedFetch, entityRef]);
 
+  /** Map EvalResult -> UI checks for ChecksTable */
+  const checks = useMemo<ChecksTableRow[]>(() => {
+    if (!evalResult) return [];
+    return mapEvaluateResponseToRows(evalResult.results ?? []);
+  }, [evalResult]);
+
+  /** Create remediation issue for a failed/warned check, then refresh */
+  const remediateCheck = useCallback(async (check: UICheck) => {
+    try {
+      const baseUrl = await discoveryApi.getBaseUrl('scorecards');
+      const res = await authedFetch(`${baseUrl}/issues`, {
+        method: 'POST',
+        body: JSON.stringify({
+          entityRef,
+          checkId: check.id,
+          title: `[Scorecards] Remediate: ${check.title}`
+        }),
+      });
+      if (!res.ok) throw new Error(`create issue failed: ${res.status} ${res.statusText}`);
+      await fetchAll();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('remediateCheck failed', e);
+    }
+  }, [discoveryApi, authedFetch, entityRef, fetchAll]);
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   if (loading) return <Progress />;
@@ -197,35 +209,9 @@ export const EntityScorecardContent: React.FC = () => {
 
       {evalResult && <ScorecardCard data={evalResult} />}
 
-      {/* <InfoCard title={`Tracks (${tracks.length})`}>
-        {tracks.length === 0 ? <div>No tracks</div> : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {tracks.map(t => (
-              <li key={t.id}>
-                <strong>{t.name}</strong>{t.label ? ` — ${t.label}` : ''}
-                <div style={{ fontSize: 12, opacity: .8 }}>
-                  check: <code>{t.checkId}</code> · opened: {new Date(t.openedAt).toLocaleString()}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </InfoCard>
+      {/* Added: Checks table with filtering/sorting and remediation hook */}
+      <ChecksTable checks={checks} onRemediate={remediateCheck} />
 
-      <InfoCard title={`Issues (${issues.length})`}>
-        {issues.length === 0 ? <div>No issues</div> : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {issues.map(i => (
-              <li key={i.id}>
-                <strong>[{i.severity.toUpperCase()}]</strong> {i.title}
-                <div style={{ fontSize: 12, opacity: .8 }}>
-                  key: <code>{i.key}</code> · check: <code>{i.checkId}</code> · opened: {new Date(i.openedAt).toLocaleString()}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </InfoCard> */}
       <TrackList tracks={tracks} />
       <IssueList issues={issues} />
       <ProjectList projects={projects} entityRef={entityRef} />

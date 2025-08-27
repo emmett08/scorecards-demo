@@ -1,14 +1,21 @@
-import { createFrontendPlugin, PageBlueprint, NavItemBlueprint, ApiBlueprint, discoveryApiRef, fetchApiRef, identityApiRef } from '@backstage/frontend-plugin-api';
+import {
+  createFrontendPlugin,
+  PageBlueprint, NavItemBlueprint,
+  ApiBlueprint, discoveryApiRef, fetchApiRef, identityApiRef
+} from '@backstage/frontend-plugin-api';
 import { EntityContentBlueprint } from '@backstage/plugin-catalog-react/alpha';
 import { scorecardsRootRouteRef, entityScorecardsRouteRef, viewEntityRouteRef, entityEventsRouteRef } from './routes';
 import { DefaultScorecardsApi, scorecardsApiRef } from './api';
 import { Assessment } from '@mui/icons-material';
+import './styles/tokens.css';
+import './styles/globals.css';
 
 const scorecardsPage = PageBlueprint.make({
   params: {
-    routeRef: scorecardsRootRouteRef,
     path: '/scorecards',
-    loader: () => import('./components/ScorecardsPage').then(m => <m.ScorecardsPage />),
+    routeRef: scorecardsRootRouteRef,
+    loader: () =>
+      import('./components/ScorecardsPage').then(m => <m.ScorecardsPage />),
   },
 });
 
