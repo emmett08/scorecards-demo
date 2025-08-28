@@ -37,20 +37,28 @@ function classifyStatus(passed: boolean, severity: 'low' | 'medium' | 'high', up
 
 }
 
-function makeDummyTrend(points: number, base: number): number[] {
+function fnv1a32(str: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    // 32-bit FNV-1a prime
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+function makeDummyTrend(points: number, base: number, seedKey: string): number[] {
   const out: number[] = [];
-  let seed = 42; // deterministic
-  let i = 0;
-  while (i < points) {
-    // simple pseudo-random in [0,1)
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    const n = (seed >>> 0) / 4294967296;
-    // small wiggle +-0.2 around base
-    const v = base + (n - 0.5) * 0.4;
-    // clamp to [0,5], 2 decimals
+  let seed = fnv1a32(seedKey); // seed is unique per check
+  for (let i = 0; i < points; i++) {
+    // simple LCG in [0,1)
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    const n = seed / 4294967296;
+    // small wiggle ±0.2 around base; add a tiny drift component to look less flat
+    const drift = (i / Math.max(1, points - 1)) * 0.1 - 0.05; // [-0.05, +0.05]
+    const v = base + (n - 0.5) * 0.4 + drift;
     const clamped = Math.max(0, Math.min(5, v));
     out.push(Number(clamped.toFixed(2)));
-    i += 1;
   }
   return out;
 }
@@ -136,19 +144,8 @@ export function registerEvaluateRoutes(router: express.Router) {
     const evalRes = await withLevels.evaluate(coreShim as any, def as any, entityRef);
     const levelColor = evalRes.level ? levelPalette[evalRes.level.id] : undefined;
     const nowIso = new Date().toISOString();
-    const enhancedResults = (evalRes.results ?? []).map((r: any) => {
+    const enhancedResults = (evalRes.results ?? []).map((r: any, idx: number) => {
       const updatedAt: string = r.evaluatedAt ?? evalRes.evaluatedAt ?? nowIso;
-
-      // let status: UIStatus;
-      // if (r.passed) {
-      //   status = 'pass';
-      // } else if (r.severity === 'high') {
-      //   status = 'fail';
-      // } else {
-      //   status = 'warn';
-      // }
-
-      // choose a base around the current numeric value if present, otherwise from pass/fail
       const numeric = typeof r.value === 'number' ? r.value : undefined;
       let base: number;
 
@@ -163,14 +160,16 @@ export function registerEvaluateRoutes(router: express.Router) {
         }
       }
 
+      const checkId = r.check?.id ?? r.id ?? r.ref ?? r.name ?? `idx-${idx}`;
+      const seedKey = `${entityRef}|${scorecardId}|${checkId}`;
+
       return {
         ...r,
         status: classifyStatus(r.passed, r.severity ?? 'medium', updatedAt),
-        trend: makeDummyTrend(12, base),
+        trend: makeDummyTrend(12, base, seedKey),
         updatedAt,
       };
     });
-    // Emit a bus event (captured into history by the global subscriber)
     const ev: BusEvent<EntityPayload> = {
       id: `eval-${Date.now()}`,
       timestamp: new Date().toISOString(),

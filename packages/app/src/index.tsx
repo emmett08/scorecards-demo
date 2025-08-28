@@ -2,8 +2,7 @@
 import { createApp } from '@backstage/frontend-defaults';
 import { createRoot } from 'react-dom/client';
 
-// import '@internal/plugin-scorecards/tokens.css';
-// import '@internal/plugin-scorecards/globals.css';
+import '@internal/plugin-scorecards/styles.css';
 import '@backstage/cli/asset-types';
 import '@backstage/ui/css/styles.css';
 
